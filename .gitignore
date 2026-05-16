@@ -1,0 +1,47 @@
+# Visual Studio
+.vs/
+*.VC.db
+*.VC.opendb
+*.suo
+
+# Build folders
+build/
+build_x64/
+x64/
+Release/
+Debug/
+out/
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+
+# Dependencies
+.deps/
+deps/
+
+# Compiled binaries
+*.dll
+*.exe
+*.lib
+*.obj
+*.pdb
+*.exp
+
+# Generated packages
+*.zip
+*.7z
+
+# Qt
+moc_*
+ui_*
+qrc_*
+
+# Logs
+*.log
+
+# OS files
+Thumbs.db
+.DS_Store
