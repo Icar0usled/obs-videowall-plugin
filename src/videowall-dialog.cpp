@@ -10,6 +10,7 @@
 #include <util/config-file.h>
 #include <QSplitter>
 #include <QTreeWidgetItem>
+#include <cmath>
 
 VideoWallDialog::VideoWallDialog(QWidget *parent) : QDialog(parent)
 {
@@ -81,15 +82,23 @@ VideoWallDialog::VideoWallDialog(QWidget *parent) : QDialog(parent)
 	});
 	layout->addWidget(fitWallButton);
 	connect(fitWallButton, &QPushButton::clicked, this, [this]() {
-		obs_source_t *currentSceneSource = obs_frontend_get_current_scene();
+		obs_source_t *sceneSource = obs_get_source_by_name(selectedSceneName.toUtf8().constData());
 
-		if (!currentSceneSource)
+		if (!sceneSource) {
+
+			blog(LOG_WARNING, "[VideoWall] Scene not found: %s", selectedSceneName.toUtf8().constData());
+
 			return;
+		}
 
-		obs_scene_t *scene = obs_scene_from_source(currentSceneSource);
+		obs_scene_t *scene = obs_scene_from_source(sceneSource);
 
-		if (!scene)
+		if (!scene) {
+
+			obs_source_release(sceneSource);
+
 			return;
+		}
 
 		obs_sceneitem_t *item = nullptr;
 
@@ -161,19 +170,89 @@ VideoWallDialog::VideoWallDialog(QWidget *parent) : QDialog(parent)
 			position.y = 0;
 		}
 
-		obs_sceneitem_set_pos(item, &position);
+		
 
-		vec2 bounds;
+		obs_transform_info info;
+
+		obs_sceneitem_get_info2(item, &info);
+
+		blog(LOG_INFO, "[VideoWall] Alignment=%u", info.alignment);
+
+		obs_source_t *source = obs_sceneitem_get_source(item);
+
+		uint32_t sourceWidth = obs_source_get_width(source);
+		uint32_t sourceHeight = obs_source_get_height(source);
+
+		blog(LOG_INFO, "[VideoWall] SourceSize=%ux%u", sourceWidth, sourceHeight);
+
+		blog(LOG_INFO, "[VideoWall] Before: pos=(%.2f, %.2f) rot=%.2f align=%u", info.pos.x, info.pos.y,
+		     info.rot, info.alignment);
+
+		float rotation = fmodf(info.rot, 360.0f);
+
+		if (rotation < 0.0f)
+			rotation += 360.0f;
+
+		blog(LOG_INFO, "[VideoWall] NormalizedRotation=%.2f", rotation);
+
+		bool rotated90 = (rotation > 89.0f && rotation < 91.0f) || (rotation > 269.0f && rotation < 271.0f);
+
+		blog(LOG_INFO, "[VideoWall] Rotation = %.2f  rotated90 = %s", rotation, rotated90 ? "true" : "false");
 
 		if (region) {
 
-			bounds.x = region->width;
-			bounds.y = region->height;
+			if (rotation > 89.0f && rotation < 91.0f) {
+
+				position.x += region->width;
+
+			} else if (rotation > 269.0f && rotation < 271.0f) {
+
+				position.y += region->height;
+
+			} else if (rotation > 179.0f && rotation < 181.0f) {
+
+				position.x += region->width;
+				position.y += region->height;
+			}
+		}
+
+		obs_sceneitem_set_alignment(item, OBS_ALIGN_TOP | OBS_ALIGN_LEFT);
+
+		obs_sceneitem_set_pos(item, &position);
+
+		blog(LOG_INFO, "[VideoWall] Rotation = %.2f  rotated90 = %s", rotation, rotated90 ? "true" : "false");
+
+		vec2 bounds;
+
+		 if (region) {
+
+			if (rotated90) {
+
+				bounds.x = region->height;
+				bounds.y = region->width;
+
+			} else {
+
+				bounds.x = region->width;
+				bounds.y = region->height;
+			}
+
+			blog(LOG_INFO, "[VideoWall] Bounds=%.2f x %.2f", bounds.x, bounds.y);
 
 		} else {
 
-			bounds.x = (float)ovi.base_width;
-			bounds.y = (float)ovi.base_height;
+			if (rotated90) {
+
+				bounds.x = (float)ovi.base_height;
+				bounds.y = (float)ovi.base_width;
+
+			} else {
+
+				bounds.x = (float)ovi.base_width;
+				bounds.y = (float)ovi.base_height;
+			}
+
+			blog(LOG_INFO, "[VideoWall] Bounds=%.2f x %.2f", bounds.x, bounds.y);
 		}
 
 		obs_sceneitem_set_bounds_type(item, OBS_BOUNDS_STRETCH);
@@ -187,6 +266,15 @@ VideoWallDialog::VideoWallDialog(QWidget *parent) : QDialog(parent)
 		obs_sceneitem_set_scale(item, &scale);
 
 		obs_sceneitem_force_update_transform(item);
+
+		obs_transform_info newInfo;
+
+		obs_sceneitem_get_info2(item, &newInfo);
+
+		blog(LOG_INFO, "[VideoWall] After: pos=(%.2f, %.2f) rot=%.2f align=%u", newInfo.pos.x, newInfo.pos.y,
+		     newInfo.rot, newInfo.alignment);
+
+		obs_source_release(sceneSource);
 
 		blog(LOG_INFO, "[VideoWall] Source fitted to wall");
 	});
